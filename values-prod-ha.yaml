@@ -1,0 +1,74 @@
+# Production HA values for solace-cache
+# This file contains only the overrides from values.yaml
+# Copy this file and customize for your environment
+
+# Container image configuration
+image:
+  repository: your-registry.example.com/solace-cache
+  tag: "1.0.11"
+
+# Use if pulling from private registry
+imagePullSecrets:
+  - name: registry-credentials
+
+# Production resource allocations
+# Higher than defaults for production workloads
+resources:
+  limits:
+    cpu: 4000m
+    memory: 4Gi
+  requests:
+    cpu: 1000m
+    memory: 1Gi
+
+# Solace Cache Configuration
+solaceCache:
+  # Two instances for HA - provide two unique names that match broker config
+  instanceNames:
+    - "prod-cache-inst1"
+    - "prod-cache-inst2"
+  
+  # Distributed cache name (should match broker configuration)
+  distributedCacheName: "prod-distributed-cache"
+  
+  broker:
+    # Solace broker connection string(s)
+    # For HA, provide multiple hosts: "tcp://broker1:55555,tcp://broker2:55555"
+    host: "tcps://prod-broker.example.com:55443"
+    
+    vpn: "production-vpn"
+    
+    # Use existing secret for credentials (recommended)
+    existingSecret: "solace-cache-credentials"
+    
+    # SSL/TLS enabled for production
+    ssl:
+      enabled: true
+      trustStoreSecret: "solace-broker-ca-cert"
+      trustStoreKey: "ca.crt"
+
+# Pod anti-affinity - STRICT separation across nodes in production
+# (values.yaml uses preferredDuringScheduling, this uses required)
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchExpressions:
+        - key: app.kubernetes.io/name
+          operator: In
+          values:
+          - solace-cache
+      topologyKey: kubernetes.io/hostname
+
+# Optional: Node selection for cache pods
+# nodeSelector:
+#   workload: cache
+#   environment: production
+
+# Optional: Tolerations for tainted nodes
+# tolerations:
+#   - key: "cache"
+#     operator: "Equal"
+#     value: "true"
+#     effect: "NoSchedule"
+

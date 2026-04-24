@@ -1,0 +1,29 @@
+replicaCount: 2
+
+image:
+  repository: solace-cache  # Local image name
+  pullPolicy: IfNotPresent   # Critical for local images!
+  tag: "latest"
+
+solaceCache:
+  # MUST match what you configured on the Solace broker
+  instanceNames:
+    - "dc1-c1-i1"  # Whatever names you configured on broker
+    - "dc1-c1-i2"
+  
+  distributedCacheName: "dc1"
+  
+  broker:
+    host: "tcp://172.17.0.2:55555"  # Your broker connection
+    vpn: "default"
+    username: "cache"
+    password: "cache"
+    existingSecret: ""  # Leave empty for testing
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi

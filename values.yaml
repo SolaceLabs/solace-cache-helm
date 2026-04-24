@@ -1,0 +1,193 @@
+# Default values for solace-cache.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Number of cache instances to run
+# For production, run 2 instances for redundancy and load balancing
+replicaCount: 2
+
+# Container image configuration
+image:
+  # TODO: Replace with your Solace Cache container image repository
+  repository: your-registry/solace-cache
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+
+# Secrets for pulling from a private container registry
+imagePullSecrets: []
+
+# Override the chart name
+nameOverride: ""
+fullnameOverride: ""
+
+# Service account configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# Annotations to add to pods
+podAnnotations: {}
+
+# Labels to add to pods
+podLabels: {}
+
+# Pod security context
+podSecurityContext: {}
+  # fsGroup: 2000
+
+# Container security context
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# Service configuration
+# Headless service (clusterIP: None) is used for StatefulSet DNS
+# Solace Cache only makes outbound connections - no inbound ports exposed
+
+# Resource limits and requests for Solace Cache
+# Adjust based on your cache size and throughput requirements
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Health probes for Solace Cache
+# Adjust these based on your actual health check mechanism
+livenessProbe:
+  exec:
+    command:
+    - pgrep
+    - -f
+    - SolaceCache
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  exec:
+    command:
+    - pgrep
+    - -f
+    - SolaceCache
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Autoscaling configuration
+# NOTE: Solace Cache instances are "pets" not "cattle" - autoscaling is NOT recommended
+# Keep the replica count fixed at 2 for production
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+  # - name: foo
+  #   secret:
+  #     secretName: mysecret
+  #     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+  # - name: foo
+  #   mountPath: "/etc/foo"
+  #   readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+# Pod anti-affinity to spread cache instances across nodes for HA
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - solace-cache
+        topologyKey: kubernetes.io/hostname
+
+# PodDisruptionBudget ensures at least 1 instance is always available
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Solace Cache specific configuration
+solaceCache:
+  # Cache instance names - must match the names configured on the Solace broker
+  # Provide a list with one name per replica
+  # For 2 replicas, provide 2 names: ["cache1-inst1", "cache1-inst2"]
+  # IMPORTANT: These names must exactly match what you configured on the broker
+  instanceNames:
+    - "cache-instance-0"
+    - "cache-instance-1"
+  
+  # Distributed cache name (optional but recommended)
+  # Should match the distributed cache name configured on the Solace broker
+  # All instances connect to the same distributed cache
+  distributedCacheName: "default-cache"
+  
+  # Connection details for Solace broker
+  # It's recommended to use a Secret for sensitive data
+  broker:
+    # Solace broker host(s) - can be comma-separated for failover
+    # Example: "tcp://broker1.example.com:55555,tcp://broker2.example.com:55555"
+    host: "tcp://solace-broker.default.svc.cluster.local:55555"
+    
+    # Message VPN name
+    vpn: "default"
+    
+    # Client username (store in secret for production)
+    username: "cache"
+    
+    # Client password (store in secret for production)
+    # Leave empty to use existingSecret
+    password: "cache"
+    
+    # Use existing secret for credentials
+    # If set, username and password above are ignored
+    # Secret should have keys: username, password
+    existingSecret: ""
+    
+    # SSL/TLS configuration
+    ssl:
+      enabled: false
+      # If using SSL, provide the CA certificate via a secret
+      # The secret should contain a key with the certificate file
+      trustStoreSecret: ""
+      trustStoreKey: "ca.crt"
+  
+  # Custom config.txt content
+  # If not provided, a default config will be generated from broker settings
+  customConfig: ""
+  
+  # Additional cache-specific settings
+  settings:
+    # API/SDK log level: EMERGENCY, ALERT, CRITICAL, ERROR, WARNING, NOTICE, INFO, DEBUG
+    sdkLogLevel: "INFO"
+    # Cache instance log level: EMERGENCY, ALERT, CRITICAL, ERROR, WARNING, NOTICE, INFO, DEBUG
+    cacheLogLevel: "INFO"

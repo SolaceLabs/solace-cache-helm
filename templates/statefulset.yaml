@@ -1,0 +1,160 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "solace-cache.fullname" . }}
+  labels:
+    {{- include "solace-cache.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "solace-cache.fullname" . }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "solace-cache.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "solace-cache.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "solace-cache.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+      - name: config-init
+        image: busybox:latest
+        command:
+        - sh
+        - -c
+        - |
+          # Extract pod ordinal from hostname (e.g., solace-cache-0 -> 0)
+          POD_ORDINAL=$(echo $HOSTNAME | grep -o '[0-9]*$')
+          
+          # Build the cache instance name using the provided array
+          INSTANCE_NAMES="{{ join " " .Values.solaceCache.instanceNames }}"
+          INSTANCE_NAME=$(echo $INSTANCE_NAMES | cut -d' ' -f$((POD_ORDINAL + 1)))
+          
+          if [ -z "$INSTANCE_NAME" ]; then
+            echo "ERROR: No instance name found for pod ordinal $POD_ORDINAL"
+            echo "Check that solaceCache.instanceNames has enough entries for replica count"
+            exit 1
+          fi
+          
+          # Copy template and substitute variables
+          cp /config-template/config.txt /config/config.txt
+          
+          # Substitute the instance name
+          sed -i "s|__CACHE_INSTANCE_NAME__|${INSTANCE_NAME}|g" /config/config.txt
+          sed -i "s|__SESSION_APPLICATION_DESCRIPTION__|Solace Cache instance ${INSTANCE_NAME}|g" /config/config.txt
+          
+          echo "Generated config for instance: ${INSTANCE_NAME}"
+        volumeMounts:
+        - name: config-template
+          mountPath: /config-template
+          readOnly: true
+        - name: config
+          mountPath: /config
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - exec /home/solace/SolaceCache/bin/SolaceCache --file=$CONFIG_FILE_PATH
+          env:
+          - name: CONFIG_FILE_PATH
+            value: "/home/solace/config/config.txt"
+          {{- if .Values.solaceCache.broker.existingSecret }}
+          - name: SESSION_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.solaceCache.broker.existingSecret }}
+                key: username
+          - name: SESSION_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.solaceCache.broker.existingSecret }}
+                key: password
+          {{- else }}
+          - name: SESSION_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "solace-cache.fullname" . }}-credentials
+                key: username
+          - name: SESSION_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "solace-cache.fullname" . }}-credentials
+                key: password
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+          - name: config
+            mountPath: /home/solace/config
+            readOnly: false
+          {{- if .Values.solaceCache.broker.ssl.enabled }}
+          - name: truststore
+            mountPath: /home/solace/truststore
+            readOnly: true
+          {{- end }}
+          {{- with .Values.volumeMounts }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+      volumes:
+      - name: config-template
+        configMap:
+          name: {{ include "solace-cache.fullname" . }}-config
+      - name: config
+        emptyDir: {}
+      {{- if .Values.solaceCache.broker.ssl.enabled }}
+      - name: truststore
+        secret:
+          secretName: {{ .Values.solaceCache.broker.ssl.trustStoreSecret }}
+          items:
+          - key: {{ .Values.solaceCache.broker.ssl.trustStoreKey }}
+            path: {{ .Values.solaceCache.broker.ssl.trustStoreKey }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

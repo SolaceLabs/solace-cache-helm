@@ -1,0 +1,53 @@
+Solace Cache has been deployed!
+
+Release Name: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+Your Solace Cache deployment consists of:
+- {{ .Values.replicaCount }} replica(s) for high availability (StatefulSet)
+{{- if .Values.podDisruptionBudget.enabled }}
+- PodDisruptionBudget ensuring {{ .Values.podDisruptionBudget.minAvailable }} instance(s) always available
+{{- end }}
+
+Cache Instance Configuration:
+{{- range $index, $name := .Values.solaceCache.instanceNames }}
+- Pod {{ $index }}: {{ $name }}
+{{- end }}
+{{- if .Values.solaceCache.distributedCacheName }}
+- Distributed Cache: {{ .Values.solaceCache.distributedCacheName }}
+{{- end }}
+
+To check the status of your cache instances:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "solace-cache.name" . }}
+
+To view the logs from a specific cache instance:
+
+  kubectl logs -n {{ .Release.Namespace }} {{ include "solace-cache.fullname" . }}-0 -f
+  kubectl logs -n {{ .Release.Namespace }} {{ include "solace-cache.fullname" . }}-1 -f
+
+To verify the generated config for each instance:
+
+  kubectl exec -n {{ .Release.Namespace }} {{ include "solace-cache.fullname" . }}-0 -- cat /home/solace/config/config.txt | grep CACHE_INSTANCE_NAME
+
+Connection Configuration:
+- Broker Host: {{ .Values.solaceCache.broker.host }}
+- Message VPN: {{ .Values.solaceCache.broker.vpn }}
+- Username: {{ .Values.solaceCache.broker.username }}
+{{- if .Values.solaceCache.broker.ssl.enabled }}
+- SSL/TLS: Enabled
+{{- end }}
+
+Next Steps:
+1. Verify cache instances are running and connected to the broker
+2. Ensure the cache instance names match what's configured on your Solace broker
+3. Add the cache instances to your Distributed Cache on the Solace message router
+4. Follow the Solace documentation to configure and manage your Solace Cache:
+   https://docs.solace.com/Solace-PubSub-Cache/Configuring-and-Managing-PubSub-Cache.htm
+
+IMPORTANT: 
+- These are stateful cache instances (StatefulSet) designed for high availability
+- Each instance has a unique name that MUST match the broker configuration
+- Do not scale them arbitrarily - maintain exactly {{ .Values.replicaCount }} replicas
+- If changing replica count, update the instanceNames array accordingly
+

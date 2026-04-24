@@ -1,0 +1,93 @@
+# Development/UAT values for solace-cache
+# Single instance configuration for testing and development
+
+# Single instance for dev/UAT
+replicaCount: 1
+
+image:
+  # For local development with locally built images
+  repository: solace-cache
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# No image pull secrets needed for local images
+imagePullSecrets: []
+
+# Lower resource requirements for dev/test environments
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Solace Cache Configuration for development
+solaceCache:
+  # Single instance - provide one name
+  instanceNames:
+    - "dev-cache-1"
+  
+  # Optional: distributed cache name
+  distributedCacheName: "dev-cache"
+  
+  broker:
+    # Update with your local or dev broker
+    host: "tcp://localhost:55555"
+    
+    vpn: "default"
+    
+    # Dev credentials (not suitable for production)
+    username: "cache"
+    password: "cache"
+    
+    # Leave empty for dev - credentials in values are fine
+    existingSecret: ""
+    
+    # SSL typically disabled in dev
+    ssl:
+      enabled: false
+  
+  settings:
+    # More verbose logging for development
+    # API/SDK log level
+    sdkLogLevel: "DEBUG"
+    # Cache instance log level
+    cacheLogLevel: "DEBUG"
+
+# Enable PodDisruptionBudget even for single instance for maximum uptime
+# This will block voluntary disruptions (node drains, etc.)
+# Requires manual intervention or --force to stop the pod
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# No anti-affinity needed with single instance
+affinity: {}
+
+# Disable autoscaling (not recommended for cache)
+autoscaling:
+  enabled: false
+
+# Increased failure thresholds for maximum uptime - less aggressive restarts
+livenessProbe:
+  exec:
+    command:
+    - pgrep
+    - -f
+    - SolaceCache
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 5  # Allow more failures before restart
+
+readinessProbe:
+  exec:
+    command:
+    - pgrep
+    - -f
+    - SolaceCache
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 5  # Allow more failures before marking unready

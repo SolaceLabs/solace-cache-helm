@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "solace-cache.fullname" . }}-test-connection"
+  labels:
+    {{- include "solace-cache.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: test
+      image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+      command: ['sh', '-c']
+      args:
+        - |
+          # Test that both cache instances are running
+          for i in $(seq 0 $(({{ .Values.replicaCount }} - 1))); do
+            echo "Checking pod {{ include "solace-cache.fullname" . }}-$i"
+            kubectl exec {{ include "solace-cache.fullname" . }}-$i -- pgrep -f SolaceCache || exit 1
+          done
+          echo "All cache instances are running"
+  restartPolicy: Never
+  serviceAccountName: {{ include "solace-cache.serviceAccountName" . }}
